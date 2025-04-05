@@ -14,6 +14,7 @@ shining light onto your gleam applications
 - nice to use api for structured logs
 - configurable
   - log level
+  - whether to dispatch with call or cast
   - whether console print colors or not
   - override key for time
   - override key for message

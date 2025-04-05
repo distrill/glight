@@ -7,6 +7,7 @@ import gleam/erlang/process.{type Subject}
 import gleam/io
 import gleam/json
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import gleam/string
@@ -28,6 +29,7 @@ pub fn start(transports: List(Transport)) {
       config: LogConfig(
         level: LogLevelInfo,
         is_color: True,
+        dispatch_mode: DispatchCast,
         time_key: "time",
         msg_key: "msg",
         level_key: "level",
@@ -61,6 +63,13 @@ pub fn set_level_key(ctx: LogContext, level_key: String) -> LogContext {
 
 pub fn set_time_key(ctx: LogContext, time_key: String) -> LogContext {
   LogContext(..ctx, config: LogConfig(..ctx.config, time_key:))
+}
+
+pub fn set_dispatch_mode(
+  ctx: LogContext,
+  dispatch_mode: DispatchMode,
+) -> LogContext {
+  LogContext(..ctx, config: LogConfig(..ctx.config, dispatch_mode:))
 }
 
 // logging methods
@@ -103,11 +112,24 @@ pub fn with(ctx: LogContext, key: String, value: String) -> LogContext {
 fn log(ctx: LogContext, level: LogLevel, log_msg: String) -> Bool {
   case should_log(level, ctx.config.level) {
     True -> {
-      actor.call(
-        ctx.logger,
-        fn(client) { Log(client, level, log_msg, ctx.data, ctx.config) },
-        100,
-      )
+      case ctx.config.dispatch_mode {
+        DispatchCall -> {
+          actor.call(
+            ctx.logger,
+            fn(client) {
+              Log(Some(client), level, log_msg, ctx.data, ctx.config)
+            },
+            100,
+          )
+        }
+        DispatchCast -> {
+          actor.send(
+            ctx.logger,
+            Log(None, level, log_msg, ctx.data, ctx.config),
+          )
+          True
+        }
+      }
     }
     False -> False
   }
@@ -124,7 +146,7 @@ type State {
 
 pub type Message {
   Log(
-    caller: Subject(Bool),
+    caller: Option(Subject(Bool)),
     level: LogLevel,
     msg: String,
     data: Dict(String, String),
@@ -134,18 +156,27 @@ pub type Message {
 
 fn handle_message(message: Message, state: State) -> actor.Next(Message, State) {
   case message {
-    Log(caller, level, log_msg, data, config) -> {
+    Log(maybe_caller, level, log_msg, data, config) -> {
       list.map(state.transports, fn(log) { log(level, log_msg, data, config) })
-      actor.send(caller, True)
+      case maybe_caller {
+        Some(caller) -> actor.send(caller, True)
+        None -> Nil
+      }
       actor.continue(state)
     }
   }
+}
+
+pub type DispatchMode {
+  DispatchCall
+  DispatchCast
 }
 
 pub type LogConfig {
   LogConfig(
     level: LogLevel,
     is_color: Bool,
+    dispatch_mode: DispatchMode,
     time_key: String,
     msg_key: String,
     level_key: String,
