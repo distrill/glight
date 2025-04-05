@@ -10,7 +10,13 @@ shining light onto your gleam applications
 - multi transport support
 - one line pretty print to console
 - one line write json to a file for log aggregation
+- extendable with custom transports
 - nice to use api for structured logs
+- configurable
+  - log level
+  - whether console print colors or not
+  - override key for time
+  - override key for message
 
 ## install
 ```sh
