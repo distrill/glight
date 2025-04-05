@@ -25,7 +25,13 @@ pub fn start(transports: List(Transport)) {
   |> result.try(fn(logger) {
     LogContext(
       logger:,
-      config: LogConfig(level: LogLevelInfo, is_color: True),
+      config: LogConfig(
+        level: LogLevelInfo,
+        is_color: True,
+        time_key: "time",
+        msg_key: "msg",
+        level_key: "level",
+      ),
       data: dict.new(),
     )
     |> Ok()
@@ -43,6 +49,18 @@ pub fn set_level(ctx: LogContext, level: LogLevel) -> LogContext {
 
 pub fn set_is_color(ctx: LogContext, is_color: Bool) -> LogContext {
   LogContext(..ctx, config: LogConfig(..ctx.config, is_color:))
+}
+
+pub fn set_msg_key(ctx: LogContext, msg_key: String) -> LogContext {
+  LogContext(..ctx, config: LogConfig(..ctx.config, msg_key:))
+}
+
+pub fn set_level_key(ctx: LogContext, level_key: String) -> LogContext {
+  LogContext(..ctx, config: LogConfig(..ctx.config, level_key:))
+}
+
+pub fn set_time_key(ctx: LogContext, time_key: String) -> LogContext {
+  LogContext(..ctx, config: LogConfig(..ctx.config, time_key:))
 }
 
 // logging methods
@@ -125,7 +143,13 @@ fn handle_message(message: Message, state: State) -> actor.Next(Message, State) 
 }
 
 pub type LogConfig {
-  LogConfig(level: LogLevel, is_color: Bool)
+  LogConfig(
+    level: LogLevel,
+    is_color: Bool,
+    time_key: String,
+    msg_key: String,
+    level_key: String,
+  )
 }
 
 pub type LogContext {
@@ -164,7 +188,7 @@ fn std_out(log_level, log_msg, data, config: LogConfig) {
     { " [" <> level_to_std_out_string(log_level, config) <> "]" }
     |> string.pad_end(18, " ")
   let msg = ts <> level <> " -> " <> log_msg
-  io.debug(case dict.size(data) {
+  io.println(case dict.size(data) {
     0 -> msg
     _ -> {
       msg
@@ -186,12 +210,12 @@ fn file_out(file) {
   file_stream.open(file, [file_open_mode.Append])
   |> result.map_error(FileStreamError)
   |> result.map(fn(stream) {
-    fn(log_level, log_msg, data, _config) {
+    fn(log_level, log_msg, data, config: LogConfig) {
       let log =
         [
-          #("time", birl.now() |> birl.to_iso8601() |> json.string()),
-          #("level", log_level |> level_to_string() |> json.string()),
-          #("msg", log_msg |> json.string()),
+          #(config.time_key, birl.now() |> birl.to_iso8601() |> json.string()),
+          #(config.level_key, log_level |> level_to_string() |> json.string()),
+          #(config.msg_key, log_msg |> json.string()),
           ..data
           |> dict.to_list()
           |> list.map(fn(e) { #(e.0, json.string(e.1)) })
