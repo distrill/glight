@@ -8,14 +8,14 @@ shining light onto your gleam applications
 ## why another logging library
 - actor-based
 - multi transport support
-- one line pretty print to console
-- one line write json to a file for log aggregation
+- ezpz pretty print to console
+- ezpz write json to a file for log aggregation
 - extendable with custom transports
 - nice to use api for structured logs
 - configurable
   - log level
   - whether to dispatch with call or cast
-  - whether console print colors or not
+  - whether console prints colors or not
   - override key for time
   - override key for message
 
