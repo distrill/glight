@@ -1,7 +1,0 @@
-{"time":"2025-04-04T20:52:11.383-07:00","level":"debug","msg":"hello info"}
-{"time":"2025-04-04T20:52:11.429-07:00","level":"info","msg":"info with data","key":"value"}
-{"time":"2025-04-04T20:52:11.430-07:00","level":"notice","msg":"i don't even know what notice means"}
-{"time":"2025-04-04T20:52:11.430-07:00","level":"warn","msg":"warn with even more data","another_key":"another_value","even more keys":"even more values","keys for days!":"values for days!"}
-{"time":"2025-04-04T20:52:11.431-07:00","level":"error","msg":"something went wrong"}
-{"time":"2025-04-04T20:52:11.431-07:00","level":"emergency","msg":"oh god the house is on fire!","service":"router"}
-{"time":"2025-04-04T20:52:11.432-07:00","level":"alert","msg":"oh god the house is on fire!","service":"broker"}

@@ -1,20 +1,9 @@
-import gleam/io
-import gleam/string
 import glight.{alert, debug, emergency, error, info, notice, warn, with}
 import logging.{Debug}
 
 pub fn main() {
   let logger =
-    glight.must_start([
-      glight.ConsoleTransport,
-      glight.FileTransport("gleam_server.log"),
-      glight.CustomTransport(fn(level, msg, data, config) {
-        io.debug(
-          "Custom transport: " <> string.inspect(#(level, msg, data, config)),
-        )
-        Nil
-      }),
-    ])
+    glight.must_start([glight.FileTransport(file: "server.log")])
     |> glight.set_level(Debug)
     |> glight.set_is_color(True)
 

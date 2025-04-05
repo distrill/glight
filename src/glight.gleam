@@ -164,7 +164,7 @@ fn std_out(log_level, log_msg, data, config: LogConfig) {
     { " [" <> level_to_std_out_string(log_level, config) <> "]" }
     |> string.pad_end(18, " ")
   let msg = ts <> level <> " -> " <> log_msg
-  io.println(case dict.size(data) {
+  io.debug(case dict.size(data) {
     0 -> msg
     _ -> {
       msg
@@ -179,6 +179,7 @@ fn std_out(log_level, log_msg, data, config: LogConfig) {
       |> grey()
     }
   })
+  Nil
 }
 
 fn file_out(file) {
