@@ -348,17 +348,17 @@ pub type LogContext {
 /// multiple transports at once, so you can log to the console and a file at
 /// the same time, or multiple files or multiple consoles, etc. Be creative!
 pub type Transport {
-  // ConsoleTransport logs to std out, by default with nice colors that can
-  // be turned off with the logger configuration.
+  /// ConsoleTransport logs to std out, by default with nice colors that can
+  /// be turned off with the logger configuration.
   ConsoleTransport
 
-  // FileTransport streams JSON formatted logs to a file that is created if it 
-  // does not exist. JSON keys are configurable in the logger configuration.
+  /// FileTransport streams JSON formatted logs to a file that is created if it 
+  /// does not exist. JSON keys are configurable in the logger configuration.
   FileTransport(file: String)
 
-  // CustomTransport allows you to provide your own logging function. Provide
-  // a callback that takes the log level, log message itself, structured data
-  // associated with the log and the configuration.
+  /// CustomTransport allows you to provide your own logging function. Provide
+  /// a callback that takes the log level, log message itself, structured data
+  /// associated with the log and the configuration.
   CustomTransport(
     log: fn(LogLevel, String, Dict(String, String), LogConfig) -> Nil,
   )
@@ -450,41 +450,40 @@ fn file_out(file) {
 }
 
 /// utils and helpers
-// return text to normal color
-
+/// return text to normal color
 const reset = "\u{001b}[0m"
 
-// set text to red
+/// set text to red
 fn red(s: String) {
   "\u{001b}[91m" <> s <> reset
 }
 
-// set text to magenta
+/// set text to magenta
 fn magenta(s: String) {
   "\u{001b}[95m" <> s <> reset
 }
 
-// set text to yellow
+/// set text to yellow
 fn yellow(s: String) {
   "\u{001b}[93m" <> s <> reset
 }
 
-// set text to green
+/// set text to green
 fn green(s: String) {
   "\u{001b}[92m" <> s <> reset
 }
 
-// set text to blue
+/// set text to blue
 fn blue(s: String) {
   "\u{001b}[94m" <> s <> reset
 }
 
-// set text to grey
+/// set text to grey
 fn grey(s: String) {
   "\u{001b}[90m" <> s <> reset
 }
 
-// regular string representation of each log level
+/// regular string representation of each log level
 fn level_to_string(level: LogLevel) -> String {
   case level {
     LogLevelEmergency -> "emergency"
@@ -498,7 +497,7 @@ fn level_to_string(level: LogLevel) -> String {
   }
 }
 
-// color coded(?) all caps string representation of each log level for std out
+/// color coded(?) all caps string representation of each log level for std out
 fn level_to_std_out_string(level: LogLevel, config: LogConfig) -> String {
   case config.is_color {
     True ->
@@ -526,7 +525,7 @@ fn level_to_std_out_string(level: LogLevel, config: LogConfig) -> String {
   }
 }
 
-// comparable values for individual log levels
+/// comparable values for individual log levels
 fn level_to_cmp(level: LogLevel) -> Int {
   case level {
     LogLevelEmergency -> 0
@@ -540,7 +539,7 @@ fn level_to_cmp(level: LogLevel) -> Int {
   }
 }
 
-// check if provided log level is important enough to be logged
+/// check if provided log level is important enough to be logged
 fn should_log(log_level: LogLevel, configured_level: LogLevel) -> Bool {
   level_to_cmp(log_level) <= level_to_cmp(configured_level)
 }
