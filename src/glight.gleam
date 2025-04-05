@@ -226,31 +226,31 @@ fn file_out(file) {
 /// utils and helpers
 const reset = "\u{001b}[0m"
 
-pub fn red(s: String) {
+fn red(s: String) {
   "\u{001b}[91m" <> s <> reset
 }
 
-pub fn magenta(s: String) {
+fn magenta(s: String) {
   "\u{001b}[95m" <> s <> reset
 }
 
-pub fn yellow(s: String) {
+fn yellow(s: String) {
   "\u{001b}[93m" <> s <> reset
 }
 
-pub fn green(s: String) {
+fn green(s: String) {
   "\u{001b}[92m" <> s <> reset
 }
 
-pub fn blue(s: String) {
+fn blue(s: String) {
   "\u{001b}[94m" <> s <> reset
 }
 
-pub fn grey(s: String) {
+fn grey(s: String) {
   "\u{001b}[90m" <> s <> reset
 }
 
-pub fn level_to_string(level: LogLevel) -> String {
+fn level_to_string(level: LogLevel) -> String {
   case level {
     LogLevelEmergency -> "emergency"
     LogLevelAlert -> "alert"
@@ -263,7 +263,7 @@ pub fn level_to_string(level: LogLevel) -> String {
   }
 }
 
-pub fn level_to_std_out_string(level: LogLevel, config: LogConfig) -> String {
+fn level_to_std_out_string(level: LogLevel, config: LogConfig) -> String {
   case config.is_color {
     True ->
       case level {
@@ -290,7 +290,7 @@ pub fn level_to_std_out_string(level: LogLevel, config: LogConfig) -> String {
   }
 }
 
-pub fn level_to_cmp(level: LogLevel) -> Int {
+fn level_to_cmp(level: LogLevel) -> Int {
   case level {
     LogLevelEmergency -> 0
     LogLevelAlert -> 1
@@ -303,7 +303,7 @@ pub fn level_to_cmp(level: LogLevel) -> Int {
   }
 }
 
-pub fn should_log(log_level: LogLevel, configured_level: LogLevel) -> Bool {
+fn should_log(log_level: LogLevel, configured_level: LogLevel) -> Bool {
   level_to_cmp(log_level) <= level_to_cmp(configured_level)
 }
 
