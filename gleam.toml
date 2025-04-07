@@ -1,7 +1,7 @@
 name = "glight"
 version = "1.0.5"
 
-description = "Logger library aimed at production use cases with multiple transports and structured logging data"
+description = "Logger library with multiple transports and structured logging data"
 licences = ["MIT"]
 repository = { type = "github", user = "distrill", repo = "glight" }
 
