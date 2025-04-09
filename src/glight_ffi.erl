@@ -1,7 +1,7 @@
 -module(glight_ffi).
 
 -export([configure/1, format/2, set_log_level/1, set_is_color/1, set_json_time_key/1,
-         set_json_msg_key/1]).
+         set_json_msg_key/1, set_json_level_key/1]).
 
 -define(GLIGHT_PREFIX, "glight_").
 -define(CONSOLE_PREFIX, "console_").
@@ -42,7 +42,8 @@ add_transport({file, Path}) ->
                          {glight_ffi,
                           #{target => file,
                             json_time_key => <<"time">>,
-                            json_msg_key => <<"msg">>}},
+                            json_msg_key => <<"msg">>,
+                            json_level_key => <<"level">>}},
                        config => #{file => binary_to_list(Path)}}).
 
 make_handler_id(console) ->
@@ -76,6 +77,10 @@ set_json_msg_key(JsonMsgKey) ->
   set_config(json_msg_key, JsonMsgKey),
   ok.
 
+set_json_level_key(JsonLevelKey) ->
+  set_config(json_level_key, JsonLevelKey),
+  ok.
+
 set_config(K, V) ->
   lists:foreach(fun(HandlerId) ->
                    Name = atom_to_list(HandlerId),
@@ -104,7 +109,8 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
 format(Event = #{level := Level, msg := {report, MsgMap}},
        #{target := file,
          json_time_key := JsonTimeKey,
-         json_msg_key := JsonMsgKey}) ->
+         json_msg_key := JsonMsgKey,
+         json_level_key := JsonLevelKey}) ->
   Meta = maps:get(meta, Event, #{}),
   TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
   Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
@@ -114,21 +120,22 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
     jsx:encode(
       maps:merge(#{JsonTimeKey => timestamp_json(Timestamp),
                    JsonMsgKey => Msg,
-                   <<"level">> => atom_to_binary(Level, utf8)},
+                   JsonLevelKey => atom_to_binary(Level, utf8)},
                  MsgMapWithoutMsg)),
   [Json, $\n];
 %% format for file transport with string message
 format(Event = #{level := Level, msg := {string, Msg}},
        #{target := file,
          json_time_key := JsonTimeKey,
-         json_msg_key := JsonMsgKey}) ->
+         json_msg_key := JsonMsgKey,
+         json_level_key := JsonLevelKey}) ->
   Meta = maps:get(meta, Event, #{}),
   TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
   Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Json =
     jsx:encode(#{JsonTimeKey => timestamp_json(Timestamp),
-                 <<"level">> => atom_to_binary(Level, utf8),
-                 JsonMsgKey => Msg}),
+                 JsonMsgKey => Msg,
+                 JsonLevelKey => atom_to_binary(Level, utf8)}),
   [Json, $\n];
 %% fallback
 format(Event, Config) ->

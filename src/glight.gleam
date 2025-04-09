@@ -16,6 +16,83 @@ pub type Transport {
   File(String)
 }
 
+pub type LoggerContext =
+  Dict(String, String)
+
+pub fn logger() -> LoggerContext {
+  dict.new()
+}
+
+/// This function accumulates structured data for the log message. This data
+/// will show up keyed in the json logs and formatted nicely in the console logs.
+pub fn with(logger: LoggerContext, key: String, value: String) -> LoggerContext {
+  dict.insert(logger, key, value)
+}
+
+/// Log at the emergency level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn emergency(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Emergency, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the alert level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn alert(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Alert, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the critical level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn critical(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Critical, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the error level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn error(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Error, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the warning level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn warning(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Warning, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the notice level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn notice(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Notice, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the info level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn info(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Info, dict.insert(logger, "msg", message))
+  logger
+}
+
+/// Log at the debug level. See the erlang log level documentation for 
+/// more information and context.
+/// https://www.erlang.org/doc/apps/kernel/logger_chapter.html#log-level
+pub fn debug(logger: LoggerContext, message: String) -> LoggerContext {
+  log(Debug, dict.insert(logger, "msg", message))
+  logger
+}
+
 /// Configure the default Erlang logger handler with a pretty Gleam output
 /// format, and sets the logging level to `Info`.
 ///
@@ -32,7 +109,9 @@ fn erlang_log(level: LogLevel, message: Dict(String, String)) -> Nil
 
 /// Log a message to the Erlang logger at the given log level.
 ///
-pub fn log(level: LogLevel, message: Dict(String, String)) -> Nil {
+/// Prefer to use public wrappers
+/// 
+fn log(level: LogLevel, message: Dict(String, String)) -> Nil {
   erlang_log(level, message)
   Nil
 }
@@ -74,5 +153,15 @@ fn erlang_set_json_msg_key(key: String) -> Nil
 ///
 pub fn set_json_msg_key(key: String) -> Nil {
   erlang_set_json_msg_key(key)
+  Nil
+}
+
+@external(erlang, "glight_ffi", "set_json_level_key")
+fn erlang_set_json_level_key(key: String) -> Nil
+
+/// Change the key used for the level in the log output.
+///
+pub fn set_json_level_key(key: String) -> Nil {
+  erlang_set_json_level_key(key)
   Nil
 }
