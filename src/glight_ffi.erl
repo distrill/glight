@@ -100,25 +100,19 @@ set_config(K, V) ->
 %% format for console transport - both strucutured data and string message
 format(Event = #{level := Level, msg := {report, MsgMap}},
        #{target := console, is_color := IsColor}) ->
-  Meta = maps:get(meta, Event, #{}),
-  TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
-  Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Pretty = format_pretty_multiline(MsgMap, IsColor),
-  [Timestamp, format_level(Level, #{is_color => IsColor}), Pretty, $\n];
+  [timestamp(Event), format_level(Level, #{is_color => IsColor}), Pretty, $\n];
 %% format for file transport with report data
 format(Event = #{level := Level, msg := {report, MsgMap}},
        #{target := file,
          json_time_key := JsonTimeKey,
          json_msg_key := JsonMsgKey,
          json_level_key := JsonLevelKey}) ->
-  Meta = maps:get(meta, Event, #{}),
-  TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
-  Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
   MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
   Json =
     jsx:encode(
-      maps:merge(#{JsonTimeKey => timestamp_json(Timestamp),
+      maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
                    JsonMsgKey => Msg,
                    JsonLevelKey => atom_to_binary(Level, utf8)},
                  MsgMapWithoutMsg)),
@@ -129,22 +123,16 @@ format(Event = #{level := Level, msg := {string, Msg}},
          json_time_key := JsonTimeKey,
          json_msg_key := JsonMsgKey,
          json_level_key := JsonLevelKey}) ->
-  Meta = maps:get(meta, Event, #{}),
-  TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
-  Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Json =
-    jsx:encode(#{JsonTimeKey => timestamp_json(Timestamp),
+    jsx:encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
                  JsonMsgKey => Msg,
                  JsonLevelKey => atom_to_binary(Level, utf8)}),
   [Json, $\n];
 %% fallback
 format(Event, Config) ->
-  Meta = maps:get(meta, Event, #{}),
-  TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
-  Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Level = maps:get(level, Event),
   Msg = maps:get(msg, Event),
-  [Timestamp,
+  [timestamp(Event),
    format_level(Level, Config),
    case Msg of
      {string, StrMsg} ->
@@ -252,6 +240,11 @@ bright_red(Str, IsColor) ->
     false ->
       Str
   end.
+
+timestamp(Event) ->
+  Meta = maps:get(meta, Event, #{}),
+  TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
+  calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]).
 
 timestamp_json(Timestamp) ->
   list_to_binary(lists:flatten(Timestamp)).
