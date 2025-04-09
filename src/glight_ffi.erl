@@ -1,6 +1,7 @@
 -module(glight_ffi).
 
--export([configure/1, format/2, set_log_level/1, set_is_color/1, set_time_key/1]).
+-export([configure/1, format/2, set_log_level/1, set_is_color/1, set_json_time_key/1,
+         set_json_msg_key/1]).
 
 -define(GLIGHT_PREFIX, "glight_").
 -define(CONSOLE_PREFIX, "console_").
@@ -37,7 +38,11 @@ add_transport({file, Path}) ->
   logger:add_handler(Id,
                      logger_std_h,
                      #{level => Level,
-                       formatter => {glight_ffi, #{target => file, time_key => <<"time">>}},
+                       formatter =>
+                         {glight_ffi,
+                          #{target => file,
+                            json_time_key => <<"time">>,
+                            json_msg_key => <<"msg">>}},
                        config => #{file => binary_to_list(Path)}}).
 
 make_handler_id(console) ->
@@ -63,8 +68,12 @@ set_is_color(IsColor) ->
   set_config(is_color, IsColor),
   ok.
 
-set_time_key(TimeKey) ->
-  set_config(time_key, TimeKey),
+set_json_time_key(JsonTimeKey) ->
+  set_config(json_time_key, JsonTimeKey),
+  ok.
+
+set_json_msg_key(JsonMsgKey) ->
+  set_config(json_msg_key, JsonMsgKey),
   ok.
 
 set_config(K, V) ->
@@ -83,46 +92,60 @@ set_config(K, V) ->
                 logger:get_handler_ids()),
   ok.
 
-% format for console transport - both strucutured data and string message
+%% format for console transport - both strucutured data and string message
 format(Event = #{level := Level, msg := {report, MsgMap}},
-       #{target := console, is_color := IsColor})
-  when is_map(MsgMap) ->
+       #{target := console, is_color := IsColor}) ->
   Meta = maps:get(meta, Event, #{}),
   TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
   Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Pretty = format_pretty_multiline(MsgMap, IsColor),
   [Timestamp, format_level(Level, #{is_color => IsColor}), Pretty, $\n];
-% format for file transport with structured data
+%% format for file transport with report data
 format(Event = #{level := Level, msg := {report, MsgMap}},
-       #{target := file, time_key := TimeKey}) ->
+       #{target := file,
+         json_time_key := JsonTimeKey,
+         json_msg_key := JsonMsgKey}) ->
   Meta = maps:get(meta, Event, #{}),
   TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
   Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
+  Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
+  MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
   Json =
     jsx:encode(
-      maps:merge(#{TimeKey => timestamp_json(Timestamp),
+      maps:merge(#{JsonTimeKey => timestamp_json(Timestamp),
+                   JsonMsgKey => Msg,
                    <<"level">> => atom_to_binary(Level, utf8)},
-                 MsgMap)),
+                 MsgMapWithoutMsg)),
   [Json, $\n];
-% format for file transport with string message
+%% format for file transport with string message
 format(Event = #{level := Level, msg := {string, Msg}},
-       #{target := file, time_key := TimeKey}) ->
+       #{target := file,
+         json_time_key := JsonTimeKey,
+         json_msg_key := JsonMsgKey}) ->
   Meta = maps:get(meta, Event, #{}),
   TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
   Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Json =
-    jsx:encode(#{TimeKey => timestamp_json(Timestamp),
+    jsx:encode(#{JsonTimeKey => timestamp_json(Timestamp),
                  <<"level">> => atom_to_binary(Level, utf8),
-                 <<"msg">> => Msg}),
+                 JsonMsgKey => Msg}),
   [Json, $\n];
-% fallback
+%% fallback
 format(Event, Config) ->
   Meta = maps:get(meta, Event, #{}),
   TimeMicros = maps:get(time, Meta, erlang:system_time(microsecond)),
   Timestamp = calendar:system_time_to_rfc3339(TimeMicros, [{unit, microsecond}]),
   Level = maps:get(level, Event),
   Msg = maps:get(msg, Event),
-  [Timestamp, format_level(Level, Config), gleam@string:inspect(Msg), $\n].
+  [Timestamp,
+   format_level(Level, Config),
+   case Msg of
+     {string, StrMsg} ->
+       StrMsg;
+     _ ->
+       gleam@string:inspect(Msg)
+   end,
+   $\n].
 
 format_pretty_multiline(Map0, IsColor) ->
   case maps:take(<<"msg">>, Map0) of

@@ -57,12 +57,22 @@ pub fn set_is_color(is_color: Bool) -> Nil {
   Nil
 }
 
-@external(erlang, "glight_ffi", "set_time_key")
-fn erlang_set_time_key(key: String) -> Nil
+@external(erlang, "glight_ffi", "set_json_time_key")
+fn erlang_set_json_time_key(key: String) -> Nil
 
 /// Change the key used for the time in the log output.
 ///
-pub fn set_time_key(key: String) -> Nil {
-  erlang_set_time_key(key)
+pub fn set_json_time_key(key: String) -> Nil {
+  erlang_set_json_time_key(key)
+  Nil
+}
+
+@external(erlang, "glight_ffi", "set_json_msg_key")
+fn erlang_set_json_msg_key(key: String) -> Nil
+
+/// Change the key used for the message in the log output.
+///
+pub fn set_json_msg_key(key: String) -> Nil {
+  erlang_set_json_msg_key(key)
   Nil
 }
