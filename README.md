@@ -10,14 +10,13 @@ shining light onto your gleam applications
 - multi transport support
 - ezpz pretty print to console
 - ezpz write json to a file for log aggregation
-- extendable with custom transports
 - nice to use api for structured logs
 - configurable
   - log level
-  - whether to dispatch with call or cast
   - whether console prints colors or not
-  - override key for time
-  - override key for message
+  - override json-key for time
+  - override json-key for message
+  - override json-key for level
 
 ## install
 ```sh
@@ -26,95 +25,95 @@ gleam add glight
 
 ## usage
 ```gleam
-import glight.{alert, debug, emergency, error, info, notice, warn, with}
-import logging.{Debug}
+import gleam/erlang/process
+import glight.{
+  alert, critical, debug, emergency, error, info, logger, notice, warning, with,
+}
+import logging
 
 pub fn main() {
-  let transports =[
-    // console transport pretty prints to std out
-    glight.ConsoleTransport,
+  glight.configure([glight.Console, glight.File("server.log")])
+  glight.set_log_level(glight.Debug)
+  glight.set_is_color(True)
 
-    // file transport streams json to specified file location
-    glight.FileTransport(file: "server.log"),
+  // this optional, defaults to "time"
+  glight.set_json_time_key("ts")
 
-    // roll your own custom transport for more control over format
-    glight.CustomTransport(fn(level, msg, data, config) {
-      io.debug(
-        "custom logger: " <> string.inspect(#(level, msg, data, config)),
-      )
-      Nil
-    }),
-  ]
+  // this optional, defaults to "msg"
+  glight.set_json_msg_key("message")
 
-  let logger =
-    glight.must_start(transports)
-    |> glight.set_level(Debug)
-    |> glight.set_is_color(True)
+  // this optional, defaults to "level"
+  glight.set_json_level_key("lvl")
 
-  logger |> debug("hello debug")
+  logger()
+  |> with("key", "value")
+  |> with("one", "two, buckle my shoe")
+  |> with("three", "four close the door")
+  |> debug("hello debug")
 
-  logger |> with("key", "value") |> info("info with data")
+  logger() |> with("it's catchy", "you like it") |> info("this is the hook.")
+  logger() |> with("it's catchy", "you like it") |> notice("this is the hook.")
+  logger() |> with("it's catchy", "you like it") |> warning("this is the hook.")
+  logger() |> with("it's catchy", "you like it") |> error("this is the hook.")
+  logger()
+  |> with("it's catchy", "you like it")
+  |> critical("this is the hook.")
+  logger() |> with("it's catchy", "you like it") |> alert("this is the hook.")
+  logger()
+  |> with("it's catchy", "you like it")
+  |> emergency("this is the hook.")
 
-  logger |> notice("i don't even know what notice means")
+  logging.log(logging.Debug, "we can also log from the logging moduel")
+  logging.log(
+    logging.Info,
+    "anything that uses erlang logger gets our tasty config",
+  )
 
-  logger
-  |> with("another_key", "another_value")
-  |> with("even more keys", "even more values")
-  |> with("keys for days!", "values for days!")
-  |> warn("warn with even more data")
-
-  logger |> error("something went wrong")
-
-  logger
-  |> with("service", "router")
-  |> emergency("oh god the house is on fire!")
-
-  logger
-  |> with("service", "broker")
-  |> alert("oh god the house is on fire!")
+  // in a short lived script like this, we need to sleep to see the output or
+  // else the process will exit before the logger has a chance to write
+  process.sleep(100)
 }
+
 ```
 
 ### console transport output
 (it has nice colors too)
 ```text
-21:27:22.622-07:00 [DEBUG]  -> hello info
-21:27:22.635-07:00 [INFO]   -> info with data
-                                        key: value
-21:27:22.635-07:00 [NOTICE] -> i don't even know what notice means
-21:27:22.635-07:00 [WARN]   -> warn with even more data
-                                        another_key: another_value
-                                        even more keys: even more values
-                                        keys for days!: values for days!
-21:27:22.636-07:00 [ERROR]  -> something went wrong
-21:27:22.636-07:00 [EMERG]  -> oh god the house is on fire!
-                                        service: router
-21:27:22.636-07:00 [ALERT]  -> oh god the house is on fire!
-                                        service: broker
+2025-04-09T00:39:02.489123-07:00 [DEBG] hello debug
+                                        | key: value
+                                        | one: two, buckle my shoe
+                                        | three: four close the door
+2025-04-09T00:39:02.491947-07:00 [INFO] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.491992-07:00 [NTCE] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.492012-07:00 [WARN] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.492042-07:00 [EROR] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.492089-07:00 [CRIT] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.492120-07:00 [ALRT] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.492146-07:00 [EMRG] this is the hook.
+                                        | it's catchy: you like it
+2025-04-09T00:39:02.492551-07:00 [DEBG] we can also log from the logging moduel
+2025-04-09T00:39:02.492576-07:00 [INFO] anything that uses erlang logger gets our tasty config
 ```
 
 ### file transport output
 ```sh
-→ cat server.log
-{"time":"2025-04-04T21:25:28.459-07:00","level":"debug","msg":"hello info"}
-{"time":"2025-04-04T21:25:28.508-07:00","level":"info","msg":"info with data","key":"value"}
-{"time":"2025-04-04T21:25:28.509-07:00","level":"notice","msg":"i don't even know what notice means"}
-{"time":"2025-04-04T21:25:28.509-07:00","level":"warn","msg":"warn with even more data","another_key":"another_value","even more keys":"even more values","keys for days!":"values for days!"}
-{"time":"2025-04-04T21:25:28.510-07:00","level":"error","msg":"something went wrong"}
-{"time":"2025-04-04T21:25:28.510-07:00","level":"emergency","msg":"oh god the house is on fire!","service":"router"}
-{"time":"2025-04-04T21:25:28.511-07:00","level":"alert","msg":"oh god the house is on fire!","service":"broker"}
-
-```
-
-### custom transport output
-```
-"custom logger: Debug(\"hello info\", dict.from_list([]), LogConfig(Debug, True))"
-"custom logger: Info(\"info with data\", dict.from_list([#(\"key\", \"value\")]), LogConfig(Debug, True))"
-"custom logger: Notice(\"i don't even know what notice means\", dict.from_list([]), LogConfig(Debug, True))"
-"custom logger: Warning(\"warn with even more data\", dict.from_list([#(\"another_key\", \"another_value\"), #(\"even more keys\", \"even more values\"), #(\"keys for days!\", \"values for days!\")]), LogConfig(Debug, True))"
-"custom logger: Error(\"something went wrong\", dict.from_list([]), LogConfig(Debug, True))"
-"custom logger: Emergency(\"oh god the house is on fire!\", dict.from_list([#(\"service\", \"router\")]), LogConfig(Debug, True))"
-"custom logger: Alert(\"oh god the house is on fire!\", dict.from_list([#(\"service\", \"broker\")]), LogConfig(Debug, True))"
+→ cat server.log      
+{"key":"value","lvl":"debug","message":"hello debug","one":"two, buckle my shoe","three":"four close the door","ts":"2025-04-09T00:42:29.382145-07:00"}
+{"it's catchy":"you like it","lvl":"info","message":"this is the hook.","ts":"2025-04-09T00:42:29.384872-07:00"}
+{"it's catchy":"you like it","lvl":"notice","message":"this is the hook.","ts":"2025-04-09T00:42:29.384923-07:00"}
+{"it's catchy":"you like it","lvl":"warning","message":"this is the hook.","ts":"2025-04-09T00:42:29.384975-07:00"}
+{"it's catchy":"you like it","lvl":"error","message":"this is the hook.","ts":"2025-04-09T00:42:29.385013-07:00"}
+{"it's catchy":"you like it","lvl":"critical","message":"this is the hook.","ts":"2025-04-09T00:42:29.385058-07:00"}
+{"it's catchy":"you like it","lvl":"alert","message":"this is the hook.","ts":"2025-04-09T00:42:29.385077-07:00"}
+{"it's catchy":"you like it","lvl":"emergency","message":"this is the hook.","ts":"2025-04-09T00:42:29.385113-07:00"}
+{"lvl":"debug","message":"we can also log from the logging moduel","ts":"2025-04-09T00:42:29.385370-07:00"}
+{"lvl":"info","message":"anything that uses erlang logger gets our tasty config","ts":"2025-04-09T00:42:29.385395-07:00"}
 ```
 
 Further documentation can be found at <https://hexdocs.pm/glight>.
