@@ -93,12 +93,12 @@ pub fn debug(logger: LoggerContext, message: String) -> LoggerContext {
   logger
 }
 
-/// Configure the default Erlang logger handler with a pretty Gleam output
-/// format, and sets the logging level to `Info`.
-///
 @external(erlang, "glight_ffi", "configure")
 fn erlang_configure(transports: List(Transport)) -> Nil
 
+/// Configure the Erlang logger with provided transports and set the logging
+/// level to `Info`.
+///
 pub fn configure(transports: List(Transport)) -> Nil {
   erlang_configure(transports)
   Nil
