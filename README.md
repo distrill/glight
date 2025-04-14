@@ -36,13 +36,13 @@ pub fn main() {
   glight.set_log_level(glight.Debug)
   glight.set_is_color(True)
 
-  // this optional, defaults to "time"
+  // optional, defaults to "time"
   glight.set_json_time_key("ts")
 
-  // this optional, defaults to "msg"
+  // optional, defaults to "msg"
   glight.set_json_msg_key("message")
 
-  // this optional, defaults to "level"
+  // optional, defaults to "level"
   glight.set_json_level_key("lvl")
 
   logger()
