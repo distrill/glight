@@ -97,6 +97,16 @@ set_config(K, V) ->
                 logger:get_handler_ids()),
   ok.
 
+make_json_safe(Value)
+  when is_binary(Value);
+       is_list(Value);
+       is_number(Value);
+       is_atom(Value);
+       is_boolean(Value) ->
+  Value;
+make_json_safe(Value) ->
+  io_lib:format("~p", [Value]).
+
 %% format for console transport - both strucutured data and string message
 format(Event = #{level := Level, msg := {report, MsgMap}},
        #{target := console, is_color := IsColor}) ->
@@ -110,12 +120,13 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
          json_level_key := JsonLevelKey}) ->
   Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
   MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
+  SafeMsgMap = maps:map(fun(_, V) -> make_json_safe(V) end, MsgMapWithoutMsg),
   Json =
     jsx:encode(
       maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
                    JsonMsgKey => Msg,
                    JsonLevelKey => atom_to_binary(Level, utf8)},
-                 MsgMapWithoutMsg)),
+                 SafeMsgMap)),
   [Json, $\n];
 %% format for file transport with string message
 format(Event = #{level := Level, msg := {string, Msg}},
