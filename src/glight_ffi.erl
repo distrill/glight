@@ -182,8 +182,12 @@ format_level(Level, Config) ->
       " " ++ bright_red("[EMRG]", IsColor) ++ " "
   end.
 
+format_datastring(K, V, IsColor) when is_list(K), is_list(V) ->
+  gray(io_lib:format("\n\t\t\t\t\t| ~s: ~s", [K, V]), IsColor);
+format_datastring(K, V, IsColor) when is_binary(K), is_binary(V) ->
+  gray(io_lib:format("\n\t\t\t\t\t| ~s: ~s", [K, V]), IsColor);
 format_datastring(K, V, IsColor) ->
-  gray(io_lib:format("\n\t\t\t\t\t| ~s: ~s", [K, V]), IsColor).
+  gray(io_lib:format("\n\t\t\t\t\t| ~p: ~p", [K, V]), IsColor).
 
 gray(Str, IsColor) ->
   case IsColor of

@@ -1,5 +1,5 @@
 name = "glight"
-version = "2.0.0"
+version = "2.0.1"
 
 description = "Logger library with multiple transports and structured logging data"
 licences = ["MIT"]
