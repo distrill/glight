@@ -6,7 +6,6 @@
 shining light onto your gleam applications 
 
 ## why another logging library
-- actor-based
 - multi transport support
 - ezpz pretty print to console
 - ezpz write json to a file for log aggregation
