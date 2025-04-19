@@ -18,7 +18,14 @@ configure(Transports) ->
                                     {domain,
                                      {fun logger_filters:domain/2,
                                       {stop, sub, [supervisor_report]}}},
-                                    {progress, {fun logger_filters:progress/2, stop}}],
+                                    {progress_filter, {fun logger_filters:progress/2, stop}},
+                                    {supervisor_progress,
+                                     {fun (#{meta := #{domain := [supervisor, progress]}}, _) ->
+                                            stop;
+                                          (_, _) ->
+                                            ignore
+                                      end,
+                                      []}}],
                                  metadata => #{}}),
   lists:foreach(fun logger:remove_handler/1, logger:get_handler_ids()),
   lists:foreach(fun add_transport/1, Transports),
