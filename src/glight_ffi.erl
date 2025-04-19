@@ -97,16 +97,6 @@ set_config(K, V) ->
                 logger:get_handler_ids()),
   ok.
 
-make_json_safe(Value)
-  when is_binary(Value);
-       is_list(Value);
-       is_number(Value);
-       is_atom(Value);
-       is_boolean(Value) ->
-  Value;
-make_json_safe(Value) ->
-  io_lib:format("~p", [Value]).
-
 %% format for console transport - both strucutured data and string message
 format(Event = #{level := Level, msg := {report, MsgMap}},
        #{target := console, is_color := IsColor}) ->
@@ -118,21 +108,25 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
          json_time_key := JsonTimeKey,
          json_msg_key := JsonMsgKey,
          json_level_key := JsonLevelKey}) ->
-  Msg = make_json_safe(maps:get(<<"msg">>, MsgMap, <<"">>)),
+  Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
   MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
-  SafeMsgMap = maps:map(fun(_, V) -> make_json_safe(V) end, MsgMapWithoutMsg),
-  try jsx:encode(
-        maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                     JsonMsgKey => Msg,
-                     JsonLevelKey => atom_to_binary(Level, utf8)},
-                   SafeMsgMap))
-  of
-    Json ->
-      [Json, $\n]
-  catch
-    _ ->
-      io_lib:format("~p~n", [Event])
-  end;
+  % SafeMsgMap = maps:map(fun(_, V) -> make_json_safe(V) end, MsgMapWithoutMsg),
+  SafeMsgMap =
+    maps:filter(fun(_, V) ->
+                   is_binary(V)
+                   orelse is_list(V)
+                   orelse is_number(V)
+                   orelse is_atom(V)
+                   orelse is_boolean(V)
+                end,
+                MsgMapWithoutMsg),
+  Json =
+    jsx:encode(
+      maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
+                   JsonMsgKey => Msg,
+                   JsonLevelKey => atom_to_binary(Level, utf8)},
+                 SafeMsgMap)),
+  [Json, $\n];
 %% format for file transport with string message
 format(Event = #{level := Level, msg := {string, Msg}},
        #{target := file,
