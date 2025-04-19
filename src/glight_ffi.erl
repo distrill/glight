@@ -19,10 +19,10 @@ configure(Transports) ->
                                      {fun logger_filters:domain/2,
                                       {stop, sub, [supervisor_report]}}},
                                     {label_filter,
-                                     {fun (_LogEvent, #{label := {supervisor, _}}) ->
-                                            stop;
+                                     {fun (_LogEvent, #{label := {supervisor, progress}}) ->
+                                            {stop, ignore};
                                           (_LogEvent, _) ->
-                                            ignore
+                                            {ignore, ignore}
                                       end,
                                       stop}}],
                                  metadata => #{}}),
