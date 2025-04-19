@@ -232,14 +232,26 @@ do_format(Event, Config) ->
    end,
    $\n].
 
-%% Safe JSON encoding wrapper
+%% Safe JSON encoding wrapper with original data
 safe_json_encode(Data) ->
   try
     jsx:encode(Data)
   catch
-    _:_ ->
-      % If JSX encoding fails, create a simple valid JSON string manually
-      "{\"error\":\"Failed to encode JSON data\"}"
+    Error:Reason ->
+      % Create a simpler fallback that includes the original data as a string
+      FormattedData = io_lib:format("~p", [Data]),
+      SafeJson =
+        jsx:encode(#{<<"error">> =>
+                       list_to_binary(io_lib:format("JSON encoding failed: ~p:~p",
+                                                    [Error, Reason])),
+                     <<"data">> => list_to_binary(FormattedData)}),
+      % If even that fails, provide a minimal error
+      try
+        SafeJson
+      catch
+        _:_ ->
+          "{\"error\":\"JSON encoding completely failed\"}"
+      end
   end.
 
 %% Safe multiline formatter that won't crash
