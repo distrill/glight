@@ -17,7 +17,14 @@ configure(Transports) ->
                                      {fun logger_filters:domain/2, {stop, sub, [otp, sasl]}}},
                                     {domain,
                                      {fun logger_filters:domain/2,
-                                      {stop, sub, [supervisor_report]}}}],
+                                      {stop, sub, [supervisor_report]}}},
+                                    {label_filter,
+                                     {fun (_LogEvent, #{label := {supervisor, _}}) ->
+                                            stop;
+                                          (_LogEvent, _) ->
+                                            ignore
+                                      end,
+                                      stop}}],
                                  metadata => #{}}),
   lists:foreach(fun logger:remove_handler/1, logger:get_handler_ids()),
   lists:foreach(fun add_transport/1, Transports),
