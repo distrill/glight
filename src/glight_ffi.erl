@@ -118,7 +118,7 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
          json_time_key := JsonTimeKey,
          json_msg_key := JsonMsgKey,
          json_level_key := JsonLevelKey}) ->
-  Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
+  Msg = make_json_safe(maps:get(<<"msg">>, MsgMap, <<"">>)),
   MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
   SafeMsgMap = maps:map(fun(_, V) -> make_json_safe(V) end, MsgMapWithoutMsg),
   Json =
