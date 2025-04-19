@@ -103,6 +103,19 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
   Pretty = format_pretty_multiline(MsgMap, IsColor),
   [timestamp(Event), format_level(Level, #{is_color => IsColor}), Pretty, $\n];
 %% format for file transport with report data
+format(Event = #{msg := {report, MsgMap}},
+       #{target := file,
+         json_time_key := JsonTimeKey,
+         json_msg_key := JsonMsgKey,
+         json_level_key := JsonLevelKey})
+  when is_list(MsgMap) ->
+  % Convert proplist to map or handle it differently
+  MsgMapAsMap = maps:from_list(MsgMap),
+  format(Event#{msg := {report, MsgMapAsMap}},
+         #{target => file,
+           json_time_key => JsonTimeKey,
+           json_msg_key => JsonMsgKey,
+           json_level_key => JsonLevelKey});
 format(Event = #{level := Level, msg := {report, MsgMap}},
        #{target := file,
          json_time_key := JsonTimeKey,
@@ -152,7 +165,7 @@ format(Event, Config) ->
    end,
    $\n].
 
-format_pretty_multiline(Map0, IsColor) ->
+format_pretty_multiline(Map0, IsColor) when is_map(Map0) ->
   case maps:take(<<"msg">>, Map0) of
     {Msg, Rest} ->
       PrettyLines =
@@ -160,6 +173,14 @@ format_pretty_multiline(Map0, IsColor) ->
       [Msg | PrettyLines];
     error ->
       format_pretty_kv(Map0, IsColor)
+  end;
+format_pretty_multiline(PropList, IsColor) when is_list(PropList) ->
+  case lists:keytake(<<"msg">>, 1, PropList) of
+    {value, {_, Msg}, Rest} ->
+      PrettyLines = lists:map(fun({K, V}) -> format_datastring(K, V, IsColor) end, Rest),
+      [Msg | PrettyLines];
+    false ->
+      format_pretty_kv(PropList, IsColor)
   end.
 
 format_pretty_kv({Msg, Rest}, IsColor) ->
