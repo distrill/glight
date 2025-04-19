@@ -97,73 +97,160 @@ set_config(K, V) ->
                 logger:get_handler_ids()),
   ok.
 
-%% format for console transport - both strucutured data and string message
-format(Event = #{level := Level, msg := {report, MsgMap}},
-       #{target := console, is_color := IsColor}) ->
-  Pretty = format_pretty_multiline(MsgMap, IsColor),
+%% Main format entry point with error handling
+format(Event, Config) ->
+  try
+    do_format(Event, Config)
+  catch
+    Error:Reason ->
+      % Simplified fallback formatter that won't crash
+      Level =
+        case maps:get(level, Event, undefined) of
+          undefined ->
+            error;
+          L ->
+            L
+        end,
+      ["[FORMATTER ERROR: ",
+       atom_to_list(Error),
+       " ",
+       io_lib:format("~p", [Reason]),
+       "]\n",
+       timestamp(Event),
+       " ",
+       atom_to_list(Level),
+       ": ",
+       case maps:get(msg, Event, undefined) of
+         undefined ->
+           "Unknown message";
+         {string, Msg} ->
+           Msg;
+         {report, _Report} ->
+           "Report data (formatter crashed)";
+         Other ->
+           io_lib:format("~p", [Other])
+       end,
+       "\n"]
+  end.
+
+%% Internal format implementations that can now safely crash
+do_format(Event = #{level := Level, msg := {report, MsgMap}},
+          #{target := console, is_color := IsColor}) ->
+  Pretty = safe_format_pretty_multiline(MsgMap, IsColor),
   [timestamp(Event), format_level(Level, #{is_color => IsColor}), Pretty, $\n];
-%% format for file transport with report data
-format(Event = #{msg := {report, MsgMap}},
-       #{target := file,
-         json_time_key := JsonTimeKey,
-         json_msg_key := JsonMsgKey,
-         json_level_key := JsonLevelKey})
+do_format(Event = #{msg := {report, MsgMap}},
+          #{target := file,
+            json_time_key := JsonTimeKey,
+            json_msg_key := JsonMsgKey,
+            json_level_key := JsonLevelKey})
   when is_list(MsgMap) ->
-  % Convert proplist to map or handle it differently
-  MsgMapAsMap = maps:from_list(MsgMap),
-  format(Event#{msg := {report, MsgMapAsMap}},
-         #{target => file,
-           json_time_key => JsonTimeKey,
-           json_msg_key => JsonMsgKey,
-           json_level_key => JsonLevelKey});
-format(Event = #{level := Level, msg := {report, MsgMap}},
-       #{target := file,
-         json_time_key := JsonTimeKey,
-         json_msg_key := JsonMsgKey,
-         json_level_key := JsonLevelKey}) ->
-  Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
-  MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
-  % SafeMsgMap = maps:map(fun(_, V) -> make_json_safe(V) end, MsgMapWithoutMsg),
-  SafeMsgMap =
-    maps:filter(fun(_, V) ->
-                   is_binary(V)
-                   orelse is_list(V)
-                   orelse is_number(V)
-                   orelse is_atom(V)
-                   orelse is_boolean(V)
-                end,
-                MsgMapWithoutMsg),
-  Json =
-    jsx:encode(
+  % Convert proplist to map
+  try
+    MsgMapAsMap = maps:from_list(MsgMap),
+    do_format(Event#{msg := {report, MsgMapAsMap}},
+              #{target => file,
+                json_time_key => JsonTimeKey,
+                json_msg_key => JsonMsgKey,
+                json_level_key => JsonLevelKey})
+  catch
+    _:_ ->
+      % If conversion fails, provide simplified JSON
+      Level = maps:get(level, Event, undefined),
+      LevelStr =
+        case Level of
+          undefined ->
+            <<"unknown">>;
+          _ ->
+            atom_to_binary(Level, utf8)
+        end,
+      Json =
+        safe_json_encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
+                           JsonMsgKey => <<"Error processing proplist log data">>,
+                           JsonLevelKey => LevelStr}),
+      [Json, $\n]
+  end;
+do_format(Event = #{level := Level, msg := {report, MsgMap}},
+          #{target := file,
+            json_time_key := JsonTimeKey,
+            json_msg_key := JsonMsgKey,
+            json_level_key := JsonLevelKey}) ->
+  try
+    Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
+    MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
+    % Only include safe types for JSON
+    SafeMsgMap =
+      maps:filter(fun(_, V) ->
+                     is_binary(V)
+                     orelse is_list(V)
+                     orelse is_number(V)
+                     orelse is_atom(V)
+                     orelse is_boolean(V)
+                  end,
+                  MsgMapWithoutMsg),
+    JsonData =
       maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
                    JsonMsgKey => Msg,
                    JsonLevelKey => atom_to_binary(Level, utf8)},
-                 SafeMsgMap)),
-  [Json, $\n];
-%% format for file transport with string message
-format(Event = #{level := Level, msg := {string, Msg}},
-       #{target := file,
-         json_time_key := JsonTimeKey,
-         json_msg_key := JsonMsgKey,
-         json_level_key := JsonLevelKey}) ->
+                 SafeMsgMap),
+    Json = safe_json_encode(JsonData),
+    [Json, $\n]
+  catch
+    _:_ ->
+      % If anything fails, provide simplified JSON
+      [safe_json_encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
+                          JsonMsgKey => <<"Error encoding log data">>,
+                          JsonLevelKey => atom_to_binary(Level, utf8)}),
+       $\n]
+  end;
+do_format(Event = #{level := Level, msg := {string, Msg}},
+          #{target := file,
+            json_time_key := JsonTimeKey,
+            json_msg_key := JsonMsgKey,
+            json_level_key := JsonLevelKey}) ->
   Json =
-    jsx:encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                 JsonMsgKey => Msg,
-                 JsonLevelKey => atom_to_binary(Level, utf8)}),
+    safe_json_encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
+                       JsonMsgKey => Msg,
+                       JsonLevelKey => atom_to_binary(Level, utf8)}),
   [Json, $\n];
-%% fallback
-format(Event, Config) ->
-  Level = maps:get(level, Event),
-  Msg = maps:get(msg, Event),
+do_format(Event, Config) ->
+  Level = maps:get(level, Event, undefined),
+  Msg = maps:get(msg, Event, undefined),
   [timestamp(Event),
    format_level(Level, Config),
    case Msg of
+     undefined ->
+       "undefined message";
      {string, StrMsg} ->
        StrMsg;
      _ ->
-       gleam@string:inspect(Msg)
+       try
+         gleam@string:inspect(Msg)
+       catch
+         _:_ ->
+           io_lib:format("~p", [Msg])
+       end
    end,
    $\n].
+
+%% Safe JSON encoding wrapper
+safe_json_encode(Data) ->
+  try
+    jsx:encode(Data)
+  catch
+    _:_ ->
+      % If JSX encoding fails, create a simple valid JSON string manually
+      "{\"error\":\"Failed to encode JSON data\"}"
+  end.
+
+%% Safe multiline formatter that won't crash
+safe_format_pretty_multiline(Data, IsColor) ->
+  try
+    format_pretty_multiline(Data, IsColor)
+  catch
+    _:_ ->
+      % Fallback to simple format
+      io_lib:format("~p", [Data])
+  end.
 
 format_pretty_multiline(Map0, IsColor) when is_map(Map0) ->
   case maps:take(<<"msg">>, Map0) of
@@ -181,7 +268,10 @@ format_pretty_multiline(PropList, IsColor) when is_list(PropList) ->
       [Msg | PrettyLines];
     false ->
       format_pretty_kv(PropList, IsColor)
-  end.
+  end;
+format_pretty_multiline(Other, _IsColor) ->
+  % Handle any other data type
+  io_lib:format("~p", [Other]).
 
 format_pretty_kv({Msg, Rest}, IsColor) when is_map(Rest) ->
   PrettyLines =
@@ -196,11 +286,16 @@ format_pretty_kv(Map, IsColor) when is_map(Map) ->
   lists:join(" ", PrettyPairs);
 format_pretty_kv(PropList, IsColor) when is_list(PropList) ->
   PrettyPairs = lists:map(fun({K, V}) -> format_datastring(K, V, IsColor) end, PropList),
-  lists:join(" ", PrettyPairs).
+  lists:join(" ", PrettyPairs);
+format_pretty_kv(Other, _IsColor) ->
+  % Handle any other data type
+  io_lib:format("~p", [Other]).
 
 format_level(Level, Config) ->
   IsColor = maps:get(is_color, Config, false),
   case Level of
+    undefined ->
+      gray(" [UNKN] ", IsColor);
     debug ->
       purple(" [DEBG] ", IsColor);
     info ->
