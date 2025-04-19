@@ -121,13 +121,18 @@ format(Event = #{level := Level, msg := {report, MsgMap}},
   Msg = make_json_safe(maps:get(<<"msg">>, MsgMap, <<"">>)),
   MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
   SafeMsgMap = maps:map(fun(_, V) -> make_json_safe(V) end, MsgMapWithoutMsg),
-  Json =
-    jsx:encode(
-      maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                   JsonMsgKey => Msg,
-                   JsonLevelKey => atom_to_binary(Level, utf8)},
-                 SafeMsgMap)),
-  [Json, $\n];
+  try jsx:encode(
+        maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
+                     JsonMsgKey => Msg,
+                     JsonLevelKey => atom_to_binary(Level, utf8)},
+                   SafeMsgMap))
+  of
+    Json ->
+      [Json, $\n]
+  catch
+    _ ->
+      io_lib:format("~p~n", [Event])
+  end;
 %% format for file transport with string message
 format(Event = #{level := Level, msg := {string, Msg}},
        #{target := file,
