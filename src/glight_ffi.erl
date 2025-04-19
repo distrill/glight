@@ -183,13 +183,19 @@ format_pretty_multiline(PropList, IsColor) when is_list(PropList) ->
       format_pretty_kv(PropList, IsColor)
   end.
 
-format_pretty_kv({Msg, Rest}, IsColor) ->
+format_pretty_kv({Msg, Rest}, IsColor) when is_map(Rest) ->
   PrettyLines =
     lists:map(fun({K, V}) -> format_datastring(K, V, IsColor) end, maps:to_list(Rest)),
   [Msg | PrettyLines];
-format_pretty_kv(Map, IsColor) ->
+format_pretty_kv({Msg, Rest}, IsColor) when is_list(Rest) ->
+  PrettyLines = lists:map(fun({K, V}) -> format_datastring(K, V, IsColor) end, Rest),
+  [Msg | PrettyLines];
+format_pretty_kv(Map, IsColor) when is_map(Map) ->
   PrettyPairs =
     lists:map(fun({K, V}) -> format_datastring(K, V, IsColor) end, maps:to_list(Map)),
+  lists:join(" ", PrettyPairs);
+format_pretty_kv(PropList, IsColor) when is_list(PropList) ->
+  PrettyPairs = lists:map(fun({K, V}) -> format_datastring(K, V, IsColor) end, PropList),
   lists:join(" ", PrettyPairs).
 
 format_level(Level, Config) ->
