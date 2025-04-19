@@ -12,20 +12,7 @@ configure(Transports) ->
   Level = maps:get(level, maps:get(primary, Config)),
   logger:update_primary_config(#{level => Level,
                                  filter_default => log,
-                                 filters =>
-                                   [{domain,
-                                     {fun logger_filters:domain/2, {stop, sub, [otp, sasl]}}},
-                                    {domain,
-                                     {fun logger_filters:domain/2,
-                                      {stop, sub, [supervisor_report]}}},
-                                    {progress_filter, {fun logger_filters:progress/2, stop}},
-                                    {supervisor_progress,
-                                     {fun (#{meta := #{domain := [supervisor, progress]}}, _) ->
-                                            stop;
-                                          (_, _) ->
-                                            ignore
-                                      end,
-                                      []}}],
+                                 filters => get_filters(),
                                  metadata => #{}}),
   lists:foreach(fun logger:remove_handler/1, logger:get_handler_ids()),
   lists:foreach(fun add_transport/1, Transports),
@@ -38,6 +25,7 @@ add_transport(console) ->
   logger:add_handler(Id,
                      logger_std_h,
                      #{level => Level,
+                       filters => get_filters(),
                        formatter => {glight_ffi, #{is_color => true, target => console}}});
 add_transport({file, Path}) ->
   Id = make_handler_id({file, Path}),
@@ -46,6 +34,7 @@ add_transport({file, Path}) ->
   logger:add_handler(Id,
                      logger_std_h,
                      #{level => Level,
+                       filters => get_filters(),
                        formatter =>
                          {glight_ffi,
                           #{target => file,
@@ -53,6 +42,11 @@ add_transport({file, Path}) ->
                             json_msg_key => <<"msg">>,
                             json_level_key => <<"level">>}},
                        config => #{file => binary_to_list(Path)}}).
+
+get_filters() ->
+  [{domain, {fun logger_filters:domain/2, {stop, sub, [otp, sasl]}}},
+   {domain, {fun logger_filters:domain/2, {stop, sub, [supervisor_report]}}},
+   {progress_filter, {fun logger_filters:progress/2, stop}}].
 
 make_handler_id(console) ->
   list_to_atom(?GLIGHT_PREFIX
