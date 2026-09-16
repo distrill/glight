@@ -6,7 +6,7 @@ licences = ["MIT"]
 repository = { type = "github", user = "distrill", repo = "glight" }
 
 [dependencies]
-gleam_stdlib = ">= 0.62.0 and < 1.0.0"
+gleam_stdlib = ">= 0.62.0 and < 2.0.0"
 jsx = ">= 3.1.0 and < 4.0.0"
 
 [dev-dependencies]
