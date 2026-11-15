@@ -25,6 +25,7 @@ add_transport(console) ->
   logger:add_handler(Id,
                      logger_std_h,
                      #{level => Level,
+                       filter_default => log,
                        filters => get_filters(),
                        formatter => {glight_ffi, #{is_color => true, target => console}}});
 add_transport(console_json) ->
@@ -34,6 +35,7 @@ add_transport(console_json) ->
   logger:add_handler(Id,
                      logger_std_h,
                      #{level => Level,
+                       filter_default => log,
                        filters => get_filters(),
                        formatter =>
                          {glight_ffi,
@@ -48,6 +50,7 @@ add_transport({file, Path}) ->
   logger:add_handler(Id,
                      logger_std_h,
                      #{level => Level,
+                       filter_default => log,
                        filters => get_filters(),
                        formatter =>
                          {glight_ffi,
@@ -58,9 +61,17 @@ add_transport({file, Path}) ->
                        config => #{file => binary_to_list(Path)}}).
 
 get_filters() ->
-  [{domain, {fun logger_filters:domain/2, {stop, sub, [otp, sasl]}}},
-   {domain, {fun logger_filters:domain/2, {stop, sub, [supervisor_report]}}},
-   {progress_filter, {fun logger_filters:progress/2, stop}}].
+  [{progress_filter, {fun logger_filters:progress/2, stop}},
+   {glight_report, {fun mark_glight_report/2, []}}].
+
+%% logger_std_h inserts a default report_cb before calling the formatter.
+%% Remember which reports originally had no callback so explicitly supplied
+%% callbacks (even OTP's default) can always take the native rendering path.
+mark_glight_report(Event = #{msg := {report, #{<<"msg">> := Msg}}, meta := Meta}, _)
+  when is_binary(Msg), not is_map_key(report_cb, Meta) ->
+  Event#{meta := Meta#{glight_report_without_callback => true}};
+mark_glight_report(_, _) ->
+  ignore.
 
 make_handler_id(console) ->
   list_to_atom(?GLIGHT_PREFIX
@@ -117,140 +128,64 @@ set_config(K, V) ->
                 logger:get_handler_ids()),
   ok.
 
-%% Main format entry point with error handling
+%% Keep glight's structured reports on their existing formatting path. All
+%% other messages belong to OTP, including maps with a metadata report callback.
 format(Event, Config) ->
   try
     do_format(Event, Config)
   catch
-    Error:Reason ->
-      % Simplified fallback formatter that won't crash
-      Level =
-        case maps:get(level, Event, undefined) of
-          undefined ->
-            error;
-          L ->
-            L
-        end,
-      ["[FORMATTER ERROR: ",
-       atom_to_list(Error),
-       " ",
-       io_lib:format("~p", [Reason]),
-       "]\n",
-       timestamp(Event),
-       " ",
-       atom_to_list(Level),
-       ": ",
-       case maps:get(msg, Event, undefined) of
-         undefined ->
-           "Unknown message";
-         {string, Msg} ->
-           Msg;
-         {report, _Report} ->
-           "Report data (formatter crashed)";
-         Other ->
-           io_lib:format("~p", [Other])
-       end,
-       "\n"]
+    _:_ ->
+      % Keep the original diagnostic, and keep JSON destinations as JSON even
+      % if a native formatter or Unicode conversion unexpectedly fails.
+      Message = unicode:characters_to_binary(io_lib:format("~tp", [maps:get(msg, Event)])),
+      format_message(Event, Config, Message)
   end.
 
-%% Internal format implementations that can now safely crash
-do_format(Event = #{level := Level, msg := {report, MsgMap}},
-          #{target := console, is_color := IsColor}) ->
-  Pretty = safe_format_pretty_multiline(MsgMap, IsColor),
-  [timestamp(Event), format_level(Level, #{is_color => IsColor}), Pretty, $\n];
-do_format(Event = #{msg := {report, MsgMap}},
-          #{target := file,
-            json_time_key := JsonTimeKey,
-            json_msg_key := JsonMsgKey,
-            json_level_key := JsonLevelKey})
-  when is_list(MsgMap) ->
-  % Convert proplist to map
-  try
-    MsgMapAsMap = maps:from_list(MsgMap),
-    do_format(Event#{msg := {report, MsgMapAsMap}},
-              #{target => file,
-                json_time_key => JsonTimeKey,
-                json_msg_key => JsonMsgKey,
-                json_level_key => JsonLevelKey})
-  catch
-    _:_ ->
-      % If conversion fails, provide simplified JSON
-      Level = maps:get(level, Event, undefined),
-      LevelStr =
-        case Level of
-          undefined ->
-            <<"unknown">>;
-          _ ->
-            atom_to_binary(Level, utf8)
-        end,
-      Json =
-        safe_json_encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                           JsonMsgKey => <<"Error processing proplist log data">>,
-                           JsonLevelKey => LevelStr}),
-      [Json, $\n]
+do_format(Event = #{msg := {report, #{<<"msg">> := Msg} = Report}}, Config)
+  when is_binary(Msg) ->
+  Meta = maps:get(meta, Event, #{}),
+  DefaultReportCb = fun logger:format_otp_report/1,
+  case {maps:find(report_cb, Meta), maps:get(glight_report_without_callback, Meta, false)} of
+    {error, _} -> format_glight(Event, Config, Report);
+    {{ok, DefaultReportCb}, true} -> format_glight(Event, Config, Report);
+    _ -> format_native(Event, Config)
   end;
-do_format(Event = #{level := Level, msg := {report, MsgMap}},
-          #{target := file,
-            json_time_key := JsonTimeKey,
-            json_msg_key := JsonMsgKey,
-            json_level_key := JsonLevelKey}) ->
-  try
-    Msg = maps:get(<<"msg">>, MsgMap, <<"">>),
-    MsgMapWithoutMsg = maps:remove(<<"msg">>, MsgMap),
-    % Only include safe types for JSON
-    SafeMsgMap =
-      maps:filter(fun(_, V) ->
-                     is_binary(V)
-                     orelse is_list(V)
-                     orelse is_number(V)
-                     orelse is_atom(V)
-                     orelse is_boolean(V)
-                  end,
-                  MsgMapWithoutMsg),
-    JsonData =
-      maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                   JsonMsgKey => Msg,
-                   JsonLevelKey => atom_to_binary(Level, utf8)},
-                 SafeMsgMap),
-    Json = safe_json_encode(JsonData),
-    [Json, $\n]
-  catch
-    _:_ ->
-      % If anything fails, provide simplified JSON
-      [safe_json_encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                          JsonMsgKey => <<"Error encoding log data">>,
-                          JsonLevelKey => atom_to_binary(Level, utf8)}),
-       $\n]
-  end;
-do_format(Event = #{level := Level, msg := {string, Msg}},
-          #{target := file,
-            json_time_key := JsonTimeKey,
-            json_msg_key := JsonMsgKey,
-            json_level_key := JsonLevelKey}) ->
-  Json =
-    safe_json_encode(#{JsonTimeKey => timestamp_json(timestamp(Event)),
-                       JsonMsgKey => Msg,
-                       JsonLevelKey => atom_to_binary(Level, utf8)}),
-  [Json, $\n];
 do_format(Event, Config) ->
-  Level = maps:get(level, Event, undefined),
-  Msg = maps:get(msg, Event, undefined),
-  [timestamp(Event),
-   format_level(Level, Config),
-   case Msg of
-     undefined ->
-       "undefined message";
-     {string, StrMsg} ->
-       StrMsg;
-     _ ->
-       try
-         gleam@string:inspect(Msg)
-       catch
-         _:_ ->
-           io_lib:format("~p", [Msg])
-       end
-   end,
-   $\n].
+  format_native(Event, Config).
+
+format_glight(Event = #{level := Level},
+              Config = #{target := console}, Report) ->
+  IsColor = maps:get(is_color, Config, false),
+  [timestamp(Event), format_level(Level, Config),
+   safe_format_pretty_multiline(Report, IsColor), $\n];
+format_glight(Event, Config = #{target := file}, Report) ->
+  Msg = maps:get(<<"msg">>, Report),
+  Fields = maps:filter(fun(_, V) ->
+                         is_binary(V) orelse is_list(V) orelse
+                         is_number(V) orelse is_atom(V)
+                      end,
+                      maps:remove(<<"msg">>, Report)),
+  format_json(Event, Config, Msg, Fields).
+
+format_native(Event, Config) ->
+  Rendered = logger_formatter:format(Event, #{template => [msg], single_line => false}),
+  Message = unicode:characters_to_binary(Rendered),
+  true = is_binary(Message),
+  format_message(Event, Config, Message).
+
+format_message(Event = #{level := Level}, Config = #{target := console}, Message) ->
+  [timestamp(Event), format_level(Level, Config), Message, $\n];
+format_message(Event, Config = #{target := file}, Message) ->
+  format_json(Event, Config, Message, #{}).
+
+format_json(Event = #{level := Level},
+            #{json_time_key := JsonTimeKey,
+              json_msg_key := JsonMsgKey,
+              json_level_key := JsonLevelKey}, Message, Fields) ->
+  Data = maps:merge(#{JsonTimeKey => timestamp_json(timestamp(Event)),
+                      JsonMsgKey => Message,
+                      JsonLevelKey => atom_to_binary(Level, utf8)}, Fields),
+  [safe_json_encode(Data), $\n].
 
 %% Safe JSON encoding wrapper with original data
 safe_json_encode(Data) ->
@@ -260,17 +195,14 @@ safe_json_encode(Data) ->
     Error:Reason ->
       % Create a simpler fallback that includes the original data as a string
       FormattedData = io_lib:format("~p", [Data]),
-      SafeJson =
-        jsx:encode(#{<<"error">> =>
-                       list_to_binary(io_lib:format("JSON encoding failed: ~p:~p",
-                                                    [Error, Reason])),
-                     <<"data">> => list_to_binary(FormattedData)}),
-      % If even that fails, provide a minimal error
       try
-        SafeJson
+        jsx:encode(#{<<"error">> =>
+                       unicode:characters_to_binary(io_lib:format("JSON encoding failed: ~p:~p",
+                                                                 [Error, Reason])),
+                     <<"data">> => unicode:characters_to_binary(FormattedData)})
       catch
         _:_ ->
-          "{\"error\":\"JSON encoding completely failed\"}"
+          <<"{\"error\":\"JSON encoding completely failed\"}">>
       end
   end.
 

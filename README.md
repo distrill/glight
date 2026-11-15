@@ -115,4 +115,24 @@ pub fn main() {
 {"lvl":"info","message":"anything that uses erlang logger gets our tasty config","ts":"2025-04-09T00:42:29.385395-07:00"}
 ```
 
+### OTP and Erlang diagnostics
+
+OTP crash and supervisor failure reports are included in every transport. Routine
+OTP progress reports remain suppressed. The existing primary log level is
+preserved when configuring transports, and the configured levels still apply.
+
+Native Erlang reports, strings, and format-string messages are rendered with
+[OTP's logger formatter](https://www.erlang.org/doc/apps/kernel/logger_formatter.html),
+including report callbacks supplied in event metadata. Console output keeps
+glight's timestamp and severity prefix and preserves multiline diagnostics.
+`ConsoleJson` and `File` put the rendered diagnostic text in the configured
+message field alongside the time and level fields. Each event occupies one JSON
+line, with embedded newlines escaped; native report fields are not added as
+structured JSON fields. If native rendering fails, the message contains a safe
+text representation of the original Erlang message in the same output format.
+
+Ordinary glight messages keep their pretty console layout and structured JSON
+fields, including custom fields added with `with`, configurable JSON keys, and
+console color settings.
+
 Further documentation can be found at <https://hexdocs.pm/glight>.
