@@ -10,13 +10,40 @@
 configure(Transports) ->
   Config = logger:get_config(),
   Level = maps:get(level, maps:get(primary, Config)),
-  logger:update_primary_config(#{level => Level,
-                                 filter_default => log,
-                                 filters => get_filters(),
-                                 metadata => #{}}),
-  lists:foreach(fun logger:remove_handler/1, logger:get_handler_ids()),
-  lists:foreach(fun add_transport/1, Transports),
-  ok.
+  case logger:update_primary_config(#{level => Level,
+                                      filter_default => log,
+                                      filters => get_filters(),
+                                      metadata => #{}}) of
+    ok ->
+      case remove_handlers(logger:get_handler_ids()) of
+        {ok, nil} -> configure_transports(Transports);
+        Error -> Error
+      end;
+    {error, Reason} ->
+      {error, {primary_configuration_failed, configuration_reason(Reason)}}
+  end.
+
+remove_handlers([]) ->
+  {ok, nil};
+remove_handlers([Id | Rest]) ->
+  case logger:remove_handler(Id) of
+    ok -> remove_handlers(Rest);
+    {error, Reason} ->
+      {error, {handler_removal_failed, atom_to_binary(Id, utf8),
+               configuration_reason(Reason)}}
+  end.
+
+configure_transports([]) ->
+  {ok, nil};
+configure_transports([Transport | Rest]) ->
+  case add_transport(Transport) of
+    ok -> configure_transports(Rest);
+    {error, Reason} ->
+      {error, {transport_configuration_failed, Transport, configuration_reason(Reason)}}
+  end.
+
+configuration_reason(Reason) ->
+  unicode:characters_to_binary(io_lib:format("~tp", [Reason])).
 
 add_transport(console) ->
   Id = make_handler_id(console),

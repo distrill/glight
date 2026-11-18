@@ -17,6 +17,31 @@ pub type Transport {
   File(String)
 }
 
+/// The first failed step when replacing the Erlang logger configuration.
+/// Earlier successful changes remain active; configuration does not roll back.
+pub type ConfigureError {
+  /// Updating the primary logger configuration failed.
+  PrimaryConfigurationFailed(
+    /// The underlying Erlang error rendered as text.
+    reason: String,
+  )
+  /// Removing an existing handler failed. Later handlers are left in place.
+  HandlerRemovalFailed(
+    /// The identifier of the existing handler that could not be removed.
+    handler_id: String,
+    /// The underlying Erlang error rendered as text.
+    reason: String,
+  )
+  /// Installing a requested transport failed. Earlier transports remain active,
+  /// and later transports are not attempted.
+  TransportConfigurationFailed(
+    /// The requested transport that could not be installed.
+    transport: Transport,
+    /// The underlying Erlang error rendered as text.
+    reason: String,
+  )
+}
+
 pub type LoggerContext =
   Dict(String, String)
 
@@ -94,16 +119,18 @@ pub fn debug(logger: LoggerContext, message: String) -> LoggerContext {
   logger
 }
 
-@external(erlang, "glight_ffi", "configure")
-fn erlang_configure(transports: List(Transport)) -> Nil
-
-/// Configure the Erlang logger with provided transports and set the logging
-/// level to `Info`.
+/// Replace the Erlang logger's handlers with the provided transports, preserving
+/// its current primary log level. An empty list removes all output handlers.
 ///
-pub fn configure(transports: List(Transport)) -> Nil {
-  erlang_configure(transports)
-  Nil
-}
+/// Applies primary configuration, removes existing handlers, and installs the
+/// requested transports in order. Returns `Ok(Nil)` on success, or the first
+/// failure with the affected handler or transport and the underlying Erlang
+/// reason as text. Callers decide how to handle setup failures.
+///
+/// Setup is not atomic: earlier successful changes remain active on failure,
+/// and subsequent operations are not attempted. No changes are rolled back.
+@external(erlang, "glight_ffi", "configure")
+pub fn configure(transports: List(Transport)) -> Result(Nil, ConfigureError)
 
 @external(erlang, "logger", "log")
 fn erlang_log(level: LogLevel, message: Dict(String, String)) -> Nil

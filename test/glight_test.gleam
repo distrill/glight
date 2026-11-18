@@ -1,61 +1,105 @@
-import gleam/erlang/process
+//// These tests change the VM-wide Erlang logger and must run sequentially,
+//// as gleeunit does by default. Scoped fixtures restore the configuration and
+//// remove temporary files even when an assertion fails.
+
+import configuration_helpers as helpers
+import gleam/dict
+import gleam/list
+import gleam/string
 import gleeunit
-import glight.{
-  alert, critical, debug, emergency, error, info, logger, notice, warning, with,
-}
+import glight
 import logging
 
 pub fn main() {
   gleeunit.main()
 }
 
-pub fn defaults_test() {
-  logger()
-  |> debug("debug should not print by default")
-  |> info("info should print by default")
-  |> warning("warn should print by default")
-  |> error("error should print by default")
+/// Info-level configuration suppresses Debug messages and retains messages at
+/// Info, Warning, and Error in the file transport.
+pub fn info_level_suppresses_debug_messages_test() {
+  use fixture <- helpers.with_fixture
+  let path = helpers.path(fixture, "levels.jsonl")
+  glight.set_log_level(glight.Info)
+  let assert Ok(Nil) = glight.configure([glight.File(path)])
+
+  glight.logger()
+  |> glight.debug("hidden debug")
+  |> glight.info("visible info")
+  |> glight.warning("visible warning")
+  |> glight.error("visible error")
+
+  let assert Ok(text) = helpers.read_file(path)
+  let logs = decode_lines(text)
+  assert list.map(logs, dict.get(_, "level"))
+    == [
+      Ok("info"),
+      Ok("warning"),
+      Ok("error"),
+    ]
+  assert list.map(logs, dict.get(_, "msg"))
+    == [
+      Ok("visible info"),
+      Ok("visible warning"),
+      Ok("visible error"),
+    ]
 }
 
-pub fn json_test() {
-  glight.configure([glight.Console, glight.File("server.log")])
+/// Configuration preserves structured context, custom JSON keys, every severity
+/// wrapper, and messages emitted through the logging package.
+pub fn structured_logging_preserves_fields_severities_and_integration_test() {
+  use fixture <- helpers.with_fixture
+  let path = helpers.path(fixture, "structured.jsonl")
   glight.set_log_level(glight.Debug)
-  glight.set_is_color(True)
-
-  // optional, defaults to "time"
+  let assert Ok(Nil) = glight.configure([glight.File(path)])
   glight.set_json_time_key("ts")
-
-  // optional, defaults to "msg"
   glight.set_json_msg_key("message")
-
-  // optional, defaults to "level"
   glight.set_json_level_key("lvl")
 
-  logger()
-  |> with("key", "value")
-  |> with("one", "two, buckle my shoe")
-  |> with("three", "four close the door")
-  |> debug("hello debug")
+  glight.logger()
+  |> glight.with("key", "value")
+  |> glight.debug("structured message")
+  |> glight.info("structured message")
+  |> glight.notice("structured message")
+  |> glight.warning("structured message")
+  |> glight.error("structured message")
+  |> glight.critical("structured message")
+  |> glight.alert("structured message")
+  |> glight.emergency("structured message")
+  logging.log(logging.Info, "logging package message")
 
-  logger() |> with("it's catchy", "you like it") |> info("this is the hook.")
-  logger() |> with("it's catchy", "you like it") |> notice("this is the hook.")
-  logger() |> with("it's catchy", "you like it") |> warning("this is the hook.")
-  logger() |> with("it's catchy", "you like it") |> error("this is the hook.")
-  logger()
-  |> with("it's catchy", "you like it")
-  |> critical("this is the hook.")
-  logger() |> with("it's catchy", "you like it") |> alert("this is the hook.")
-  logger()
-  |> with("it's catchy", "you like it")
-  |> emergency("this is the hook.")
+  let assert Ok(text) = helpers.read_file(path)
+  let logs = decode_lines(text)
+  assert list.map(logs, dict.get(_, "lvl"))
+    == [
+      Ok("debug"),
+      Ok("info"),
+      Ok("notice"),
+      Ok("warning"),
+      Ok("error"),
+      Ok("critical"),
+      Ok("alert"),
+      Ok("emergency"),
+      Ok("info"),
+    ]
+  list.each(list.take(logs, 8), fn(log) {
+    assert dict.get(log, "message") == Ok("structured message")
+    assert dict.get(log, "key") == Ok("value")
+    let assert Ok(time) = dict.get(log, "ts")
+    assert string.length(time) > 0
+    assert !dict.has_key(log, "msg")
+    assert !dict.has_key(log, "level")
+    assert !dict.has_key(log, "time")
+  })
+  let assert Ok(last) = list.last(logs)
+  assert dict.get(last, "message") == Ok("logging package message")
+}
 
-  logging.log(logging.Debug, "we can also log from the logging module")
-  logging.log(
-    logging.Info,
-    "anything that uses erlang logger gets our tasty config",
-  )
-
-  // in a short lived script like this, we need to sleep to see the output or
-  // else the process will exit before the logger has a chance to write
-  process.sleep(100)
+fn decode_lines(text: String) -> List(dict.Dict(String, String)) {
+  text
+  |> string.trim
+  |> string.split("\n")
+  |> list.map(fn(line) {
+    let assert Ok(log) = helpers.decode_json(line)
+    log
+  })
 }
